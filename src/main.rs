@@ -1,39 +1,35 @@
-use std::fs::{self, File};
+use std::{
+    fs::File,
+    io::{Read, Seek, SeekFrom},
+};
 
-use anyhow::{Result, bail};
+use anyhow::Result;
 use bytemuck::cast_slice;
 
 fn main() -> Result<()> {
+    let args: Vec<_> = std::env::args().collect();
 
+    let mut rom = File::open(&args[1])?;
 
-    let name = &rom[0..12];
-    let name = str::from_utf8(&[
-        b'P', b'A', b'L', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ])?
-    .trim_end_matches('\0');
+    let mut name = [0u8; 12];
+    rom.read_exact(&mut name)?;
+    let name = str::from_utf8(&name)?.trim_end_matches('\0');
 
-    println!("Name: {}", name);
+    println!("Name: {name}");
 
-    dbg!(name.as_bytes());
+    rom.seek(SeekFrom::Start(0x68))?;
 
-    let title_offset = &rom[0x68..0x68 + 4];
+    let mut title_offset = [0u8; 4];
+    rom.read_exact(&mut title_offset)?;
+    let title_offset = u32::from_le_bytes(title_offset);
 
-    let title_offset = u32::from_le_bytes([
-        title_offset[0],
-        title_offset[1],
-        title_offset[2],
-        title_offset[3],
-    ]) as usize;
+    rom.seek(SeekFrom::Start(title_offset as _))?;
+    rom.seek_relative(0x240)?;
+    let mut title = [0u8; 100];
+    rom.read_exact(&mut title)?;
+    let title = String::from_utf16(cast_slice(&title))?;
 
-    if title_offset == 0 {
-        bail!("WAAAAAA")
-    }
-
-    let title_header = &rom[title_offset..];
-
-    let title = &title_header[0x240..0x240 + 100];
-
-    println!("Title: {}", String::from_utf16_lossy(cast_slice(title)));
+    println!("Title: {}", title.trim_end_matches('\0'));
 
     Ok(())
 }
